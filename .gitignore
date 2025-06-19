@@ -1,0 +1,6 @@
+data/*
+venv/*
+*.swp
+*.html
+*.json
+__pycache__
