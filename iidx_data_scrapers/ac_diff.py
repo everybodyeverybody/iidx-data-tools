@@ -168,8 +168,8 @@ def write_html(sorted_tables: Dict[Tuple[str, str], str], output_html_file: Path
     table_ids: List[Tuple[str, str]] = [table for table in sorted_tables.keys()]
     javascript = build_javascript(table_ids)
     buttons = build_buttons(table_ids)
-    version_name = "Pinky Crush"
-    version_number = 32
+    version_name = "Sparkle Shower"
+    version_number = 33
 
     css = """
     @media screen and (max-width:376px) {

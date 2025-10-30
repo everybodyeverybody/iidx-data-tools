@@ -5,10 +5,10 @@ import json
 import html
 import logging
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Callable, Any, Union
 
-import requests  # type: ignore
+import requests
 
 from . import constants as CONSTANTS
 from .local_dataclasses import (
@@ -28,35 +28,42 @@ def _download_textage_javascript(javascript_file: str, output_path: Path) -> Pat
     # we used enumerate because we wanted the files in a specific
     # order mentioned in the html
     url = f"{textage_base_url}{javascript_file}"
-    log.info(f"Checking cache for {url}")
+    log.info(f"downloading {url}")
     last_modified_file = output_path / Path(f"{javascript_file}.last_modified")
     output_filename = output_path / Path(f"{javascript_file}")
+    response = requests.get(url)
+    # make sure to write about this as well, that its chinese w/o it
+    response.encoding = "shift_jis"
+
+    if response.status_code not in [200]:
+        raise RuntimeError(f"could not download {url}: {response.status_code}")
+    if "Last-Modified" not in response.headers:
+        raise RuntimeError(
+            f"server no longer returning last modified: {response.headers}"
+        )
     if not os.path.exists(last_modified_file):
         update = True
     else:
+        latest_last_modified = datetime.strptime(
+            response.headers["Last-Modified"], textage_last_modified_format
+        )
         with open(last_modified_file, "rt") as last_modified_reader:
-            now = datetime.now()
             current_last_modified_str = last_modified_reader.readlines()[0].strip()
             current_last_modified = datetime.strptime(
                 current_last_modified_str, textage_last_modified_format
             )
-            one_day_after_last_modified = current_last_modified + timedelta(days=1)
-            if now > one_day_after_last_modified:
-                update = True
+        if latest_last_modified > current_last_modified:
+            update = True
     if update:
-        response = requests.get(url)
-        response.encoding = "shift_jis"
-        if response.status_code not in [200]:
-            raise RuntimeError(f"Could not download {url}: {response.status_code}")
-        if "Last-Modified" not in response.headers:
-            raise RuntimeError(
-                f"Server no longer returning last modified: {response.headers}"
-            )
         log.info(f"updating {output_path}")
         with open(last_modified_file, "wt") as last_modified_writer:
             last_modified_writer.write(response.headers["Last-Modified"])
         with open(output_filename, "wt") as file_writer:
             file_writer.write(response.text)
+    else:
+        log.info(
+            f"{output_path} not modified since {response.headers['Last-Modified']}"
+        )
     return output_filename
 
 
@@ -108,7 +115,7 @@ def _convert_javascript_and_write_to_json(
 
 def filter_infinitas_only_songs(
     version_data: dict[str, list[int]], song_titles: dict[str, list[str]]
-) -> dict[str, tuple[list[str], bool]]:
+) -> dict[str, list[str]]:
     """
     Filtering logic taken from debugging
     https://textage.cc/score/scrlist.js
@@ -123,15 +130,14 @@ def filter_infinitas_only_songs(
     """
     # https://textage.cc/score/scrlist.js
     # function push_check1
-    infinitas_only_songs: dict[str, tuple[list[str], bool]] = {}
+    infinitas_only_songs: dict[str, list[str]] = {}
     for key, value in song_titles.items():
         if key not in version_data:
             continue
         version_flag = version_data[key][0]
         is_in_infinitas = version_flag & 2
         if is_in_infinitas != 0:
-            has_legg = version_flag & 8 != 0
-            infinitas_only_songs[key] = (value, has_legg)
+            infinitas_only_songs[key] = value
     return infinitas_only_songs
 
 
@@ -159,9 +165,9 @@ def _read_difficulty(version_data: dict[str, Any]) -> dict[str, dict[Difficulty,
     return difficulties_by_textage_id
 
 
-def read_notes_and_bpm() -> (
-    tuple[dict[str, tuple[bool, int, int]], dict[str, dict[Difficulty, int]]]
-):
+def read_notes_and_bpm() -> tuple[
+    dict[str, tuple[bool, int, int]], dict[str, dict[Difficulty, int]]
+]:
     bpm_by_textage_id: dict[str, tuple[bool, int, int]] = {}
     notes_by_textage_id: dict[str, dict[Difficulty, int]] = {}
     notes_and_bpm = _get_textage_note_counts_and_bpm()
@@ -222,33 +228,19 @@ def _check_textage_metadata_files(
 
 def filter_current_version_songs(
     version_data: dict[str, list[int]], song_titles: dict[str, list[str]]
-) -> dict[str, tuple[list[str], bool]]:
-    current_version_songs: dict[str, tuple[list[str], bool]] = {}
+) -> dict[str, list[str]]:
+    current_version_songs: dict[str, list[str]] = {}
     for tag, title in song_titles.items():
         if tag not in version_data:
-            log.debug(f"could not find {tag}:{title} in current version")
+            log.warning(f"could not find {tag}:{title}")
             continue
-
-        # scrlist.js push_check1 and get_level
-        for i in range(11):
-            x = version_data[tag][i * 2 + 2] & 4
-            if x == 0:
-                version_data[tag][i * 2 + 1] = 0
-                version_data[tag][i * 2 + 2] = 0
-
+        # scrlist.js line 682
         current_version_flag = version_data[tag][0]
         is_in_current_version = current_version_flag & 1
-        has_legg = (
-            version_data[tag][10] != 0
-            and version_data[tag][11] != 0
-            and version_data[tag][21] != 0
-            and version_data[tag][22] != 0
-        )
-
         if is_in_current_version == 0:
-            log.debug(f"skipping {tag}:{title} in current version")
+            log.warning(f"skipping {tag}:{title}")
             continue
-        current_version_songs[tag] = (title, has_legg)
+        current_version_songs[tag] = title
     return current_version_songs
 
 
@@ -277,7 +269,7 @@ def get_textage_version_data() -> dict[str, Any]:
         values = re.sub("D", "13", values)
         values = re.sub("E", "14", values)
         values = re.sub("F", "15", values)
-        values = re.sub(r"//\d+", "", values)
+        values = re.sub(r"//[a-zA-Z0-9]+", "", values)
         values = re.sub(',"<span.*span>"', "", values)
         key = re.sub("'", '"', key)
         return f"{key}:{values}\n"
@@ -476,32 +468,29 @@ def check_alphanumeric_folder(char: str) -> Alphanumeric:
 def _build_song_metadata_dict(
     version_data: dict[str, Any],
     song_titles: dict[str, Any],
-    song_list: dict[str, tuple[list[str], bool]],
-) -> dict[str, SongMetadata]:
+    song_list: dict[str, list[str]],
+    join_with_space: bool = True,
+) -> Any:
     all_difficulties = _read_difficulty(version_data)
     all_bpms, all_note_counts = read_notes_and_bpm()
     variable_bpms = get_variable_bpms()
     version_list = get_textage_version_list()
     metadata: dict[str, SongMetadata] = {}
     for textage_id in song_list.keys():
-        title_list, has_legg = song_list[textage_id]
         difficulty_metadata: dict[Difficulty, DifficultyMetadata] = {}
         song_difficulty: dict[Difficulty, int] = all_difficulties[textage_id]
         notes: dict[Difficulty, int] = all_note_counts[textage_id]
-        title = " ".join(title_list[5:])
-        version_id = int(title_list[0])
+        if join_with_space:
+            title = " ".join(song_list[textage_id][5:])
+        else:
+            title = "".join(song_list[textage_id][5:])
+        version_id = int(song_list[textage_id][0])
         # substream is last in textage js
         if version_id == 35:
             version_id = -1
         version = version_list[version_id]
         for diff_id in song_difficulty.keys():
             if song_difficulty[diff_id] == 0 or notes[diff_id] == 0:
-                continue
-
-            if not has_legg and diff_id in [
-                Difficulty.SP_LEGGENDARIA,
-                Difficulty.DP_LEGGENDARIA,
-            ]:
                 continue
             if textage_id in variable_bpms and diff_id in variable_bpms[textage_id]:
                 difficulty_metadata[diff_id] = variable_bpms[textage_id][diff_id]
@@ -516,8 +505,8 @@ def _build_song_metadata_dict(
         metadata[textage_id] = SongMetadata(
             textage_id=textage_id,
             title=title,
-            artist=title_list[4],
-            genre=title_list[3],
+            artist=song_list[textage_id][4],
+            genre=song_list[textage_id][3],
             textage_version_id=version_id,
             version=version,
             alphanumeric=check_alphanumeric_folder(title[0]),
@@ -541,38 +530,10 @@ def get_current_version_song_metadata_not_in_infinitas() -> dict[str, SongMetada
     inf_keys = set(list(infinitas_only_songs.keys()))
     cur_ver_keys = set(list(current_version_songs.keys()))
     not_in_inf_keys = cur_ver_keys.difference(inf_keys)
-    cur_ver_songs = {
-        textage_id: current_version_songs[textage_id] for textage_id in cur_ver_keys
-    }
-    cur_ver_metadata = _build_song_metadata_dict(
-        version_data, song_titles, cur_ver_songs
-    )
-    inf_songs = {
-        textage_id: infinitas_only_songs[textage_id] for textage_id in inf_keys
-    }
-    inf_metadata = _build_song_metadata_dict(version_data, song_titles, inf_songs)
-
-    cur_ver_leggs_not_in_inf = {
-        textage_id: metadata
-        for textage_id, metadata in cur_ver_metadata.items()
-        if textage_id in inf_metadata
-        and (
-            Difficulty.SP_LEGGENDARIA in metadata.difficulty_metadata
-            or Difficulty.DP_LEGGENDARIA in metadata.difficulty_metadata
-        )
-        and (
-            inf_metadata[textage_id].difficulty_metadata != metadata.difficulty_metadata
-        )
-    }
     not_in_inf_songs = {
         textage_id: current_version_songs[textage_id] for textage_id in not_in_inf_keys
     }
-    # this was the previous return value, we append to it
-    not_in_inf_metadata = _build_song_metadata_dict(
-        version_data, song_titles, not_in_inf_songs
-    )
-    not_in_inf_metadata.update(cur_ver_leggs_not_in_inf)
-    return not_in_inf_metadata
+    return _build_song_metadata_dict(version_data, song_titles, not_in_inf_songs)
 
 
 def get_all_song_metadata() -> dict[str, SongMetadata]:
@@ -581,9 +542,7 @@ def get_all_song_metadata() -> dict[str, SongMetadata]:
     validated_songs = {}
     for textage_id, title_version_metadata in song_titles.items():
         if textage_id not in version_data:
-            log.warning(
-                f"could not find {textage_id}:{title_version_metadata} in all song data"
-            )
+            log.warning(f"could not find {textage_id}:{title_version_metadata}")
             continue
         # scrlist.js line 682
         validated_songs[textage_id] = title_version_metadata
@@ -592,4 +551,4 @@ def get_all_song_metadata() -> dict[str, SongMetadata]:
 
 if __name__ == "__main__":
     for key, value in sorted(get_all_song_metadata().items()):
-        print(json.dumps(value.to_dict()))
+        print(value.to_dict())
