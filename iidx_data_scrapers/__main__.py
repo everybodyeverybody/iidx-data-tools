@@ -170,6 +170,18 @@ def normalize_konami_data_to_kamaitachi(song: tuple[str, str]) -> tuple[str, str
             "ＴЁЯＲＡ",
             "LETHEBOLG ～双神威に斬り咲けり～",
         ),
+        ("CANVAS feat. Quimar", "Out of Control"): (
+            "CANVAS feat. Quimär",
+            "Out of Control",
+        ),
+        ("高田 雅史", "WaterCube Pf.(RX-Ver.S.P.L.)"): (
+            "高田雅史",
+            "WaterCube Pf.(RX-Ver.S.P.L.)",
+        ),
+        ('BEMANI Sound Team "L.E.D.-G"', "THE ANCIENT KING IS BACK"): (
+            "L.E.D.-G",
+            "THE ANCIENT KING IS BACK",
+        ),
     }
 
     if song not in normalizer:
@@ -796,7 +808,7 @@ def main():
             song_difficulties_by_pack[pack] = {}
         for song in songs_by_pack[pack]["SONGS"]:
             if song not in combined_kamaitachi_data:
-                raise RuntimeError("Could not find {song} in kamaitachi data.")
+                raise RuntimeError(f"Could not find {song} in kamaitachi data.")
             song_difficulties_by_pack[pack][song] = combined_kamaitachi_data[song]
     generate_and_write_html(song_difficulties_by_pack, pack_info)
     return
