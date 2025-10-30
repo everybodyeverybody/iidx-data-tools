@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import re
+import copy
 import json
 import html
 import logging
@@ -8,7 +9,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Callable, Any, Union
 
-import requests
+import requests  # type: ignore
 
 from . import constants as CONSTANTS
 from .local_dataclasses import (
@@ -115,30 +116,55 @@ def _convert_javascript_and_write_to_json(
 
 def filter_infinitas_only_songs(
     version_data: dict[str, list[int]], song_titles: dict[str, list[str]]
-) -> dict[str, list[str]]:
+) -> tuple[dict[str, list[str]], dict[str, list[int]]]:
     """
     Filtering logic taken from debugging
-    https://textage.cc/score/scrlist.js
-    against the following textage URL showing all
-    infinitas songs
+    https://textage.cc/score/scrlist.js#function push_check
+
+    against the following textage URL showing all infinitas songs
     https://textage.cc/score/index.html?a021B000
+
+    and all songs
+    https://textage.cc/score/index.html?a001B000
 
     In the textage code, lc is the query parameter
     a021B000
 
     and mt represents the version data table bitfields
     """
-    # https://textage.cc/score/scrlist.js
-    # function push_check1
+    inf_version_data: dict[str, list[int]] = {}
     infinitas_only_songs: dict[str, list[str]] = {}
-    for key, value in song_titles.items():
-        if key not in version_data:
+    for tag, title in song_titles.items():
+        if tag not in version_data:
             continue
-        version_flag = version_data[key][0]
-        is_in_infinitas = version_flag & 2
-        if is_in_infinitas != 0:
-            infinitas_only_songs[key] = value
-    return infinitas_only_songs
+        is_in_infinitas = version_data[tag][0] & 2
+        if is_in_infinitas == 0:
+            log.warning(f"skipping {tag}:{title} in infinitas")
+            continue
+        infinitas_only_songs[tag] = title
+        get_level_num = 2
+        updated_inf_version_data: list[int] = copy.deepcopy(version_data[tag])
+        inf_specific_or_leggs_flag = updated_inf_version_data[0] & 8 == 0
+        for index in range(0, 11):
+            textage_get_level = updated_inf_version_data[index * 2 + get_level_num]
+            has_only_ac_data = textage_get_level & 4
+            if has_only_ac_data == 0 and inf_specific_or_leggs_flag:
+                updated_inf_version_data[index * 2 + 1] = 0
+                updated_inf_version_data[index * 2 + 2] = 0
+        beginner_flag = updated_inf_version_data[0] & 4 == 0
+        if beginner_flag:
+            updated_inf_version_data[1] = 0
+            updated_inf_version_data[2] = 0
+            updated_inf_version_data[3] = 0
+            updated_inf_version_data[4] = 0
+        if inf_specific_or_leggs_flag:
+            updated_inf_version_data[11] = 0
+            updated_inf_version_data[12] = 0
+            updated_inf_version_data[21] = 0
+            updated_inf_version_data[22] = 0
+        inf_version_data[tag] = updated_inf_version_data
+
+    return infinitas_only_songs, inf_version_data
 
 
 def _read_difficulty(version_data: dict[str, Any]) -> dict[str, dict[Difficulty, int]]:
@@ -228,34 +254,50 @@ def _check_textage_metadata_files(
 
 def filter_current_version_songs(
     version_data: dict[str, list[int]], song_titles: dict[str, list[str]]
-) -> dict[str, list[str]]:
+) -> tuple[dict[str, list[str]], dict[str, list[int]]]:
+    """
+    Filtering logic taken from debugging
+    https://textage.cc/score/scrlist.js#function push_check
+
+    against the following textage URL showing all infinitas songs
+    https://textage.cc/score/index.html?a021B000
+
+    and all songs
+    https://textage.cc/score/index.html?a001B000
+
+    In the textage code, lc is the query parameter
+    a021B000
+
+    and mt represents the version data table bitfields
+    """
+    current_version_data: dict[str, list[int]] = {}
     current_version_songs: dict[str, list[str]] = {}
     for tag, title in song_titles.items():
         if tag not in version_data:
-            log.warning(f"could not find {tag}:{title}")
+            log.warning(f"could not find {tag}:{title} in current version data")
             continue
-        # scrlist.js line 682
         current_version_flag = version_data[tag][0]
         is_in_current_version = current_version_flag & 1
         if is_in_current_version == 0:
-            log.warning(f"skipping {tag}:{title}")
+            log.warning(f"skipping {tag}:{title} in current version")
             continue
         current_version_songs[tag] = title
-    return current_version_songs
-
-
-def get_current_version_songs_not_in_infinitas(
-    version_data: dict[str, list[int]], song_titles: dict[str, list[str]]
-) -> list[str]:
-    current_version_songs = filter_current_version_songs(version_data, song_titles)
-    infinitas_only_songs = filter_infinitas_only_songs(version_data, song_titles)
-    inf_keys = set(list(infinitas_only_songs.keys()))
-    cur_ver_keys = set(list(current_version_songs.keys()))
-    not_in_inf_keys = cur_ver_keys.difference(inf_keys)
-    not_in_inf_song_titles = []
-    for key in not_in_inf_keys:
-        not_in_inf_song_titles.append("".join(song_titles[key][5:]))
-    return sorted(not_in_inf_song_titles)
+        get_level_num = 2
+        updated_current_version_data: list[int] = copy.deepcopy(version_data[tag])
+        for index in range(0, 11):
+            textage_get_level = version_data[tag][index * 2 + get_level_num]
+            has_only_ac_data = textage_get_level & 4
+            if has_only_ac_data == 0:
+                updated_current_version_data[index * 2 + 1] = 0
+                updated_current_version_data[index * 2 + 2] = 0
+        beginner_flag = updated_current_version_data[0] & 4 == 0
+        if beginner_flag:
+            updated_current_version_data[1] = 0
+            updated_current_version_data[2] = 0
+            updated_current_version_data[3] = 0
+            updated_current_version_data[4] = 0
+        current_version_data[tag] = updated_current_version_data
+    return current_version_songs, current_version_data
 
 
 def get_textage_version_data() -> dict[str, Any]:
@@ -518,22 +560,40 @@ def _build_song_metadata_dict(
 def get_infinitas_song_metadata() -> dict[str, SongMetadata]:
     version_data = get_textage_version_data()
     song_titles = get_textage_song_titles()
-    infinitas_only_songs = filter_infinitas_only_songs(version_data, song_titles)
+    infinitas_only_songs, _ = filter_infinitas_only_songs(version_data, song_titles)
     return _build_song_metadata_dict(version_data, song_titles, infinitas_only_songs)
 
 
 def get_current_version_song_metadata_not_in_infinitas() -> dict[str, SongMetadata]:
     version_data = get_textage_version_data()
     song_titles = get_textage_song_titles()
-    current_version_songs = filter_current_version_songs(version_data, song_titles)
-    infinitas_only_songs = filter_infinitas_only_songs(version_data, song_titles)
-    inf_keys = set(list(infinitas_only_songs.keys()))
-    cur_ver_keys = set(list(current_version_songs.keys()))
+    current_version_songs, current_version_data = filter_current_version_songs(
+        version_data, song_titles
+    )
+    infinitas_only_songs, inf_version_data = filter_infinitas_only_songs(
+        version_data, song_titles
+    )
+    current_version_data_keys: dict = {
+        key: tuple(value) for key, value in current_version_data.items()
+    }
+    inf_version_data_keys: dict = {
+        key: tuple(value) for key, value in inf_version_data.items()
+    }
+    inf_keys = set(
+        tuple([key, inf_version_data_keys[key]]) for key in infinitas_only_songs.keys()
+    )
+    cur_ver_keys = set(
+        tuple([key, current_version_data_keys[key]])
+        for key in current_version_songs.keys()
+    )
     not_in_inf_keys = cur_ver_keys.difference(inf_keys)
     not_in_inf_songs = {
-        textage_id: current_version_songs[textage_id] for textage_id in not_in_inf_keys
+        textage_id[0]: current_version_songs[textage_id[0]]
+        for textage_id in not_in_inf_keys
     }
-    return _build_song_metadata_dict(version_data, song_titles, not_in_inf_songs)
+    return _build_song_metadata_dict(
+        current_version_data, song_titles, not_in_inf_songs
+    )
 
 
 def get_all_song_metadata() -> dict[str, SongMetadata]:

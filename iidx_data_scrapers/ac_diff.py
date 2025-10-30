@@ -6,9 +6,7 @@ from datetime import datetime
 from typing import List, Dict, Callable, Tuple
 from .local_dataclasses import SongMetadata, Difficulty
 
-from .download_textage_tables import (
-    get_current_version_song_metadata_not_in_infinitas as get_em,
-)
+from .download_textage_tables import get_current_version_song_metadata_not_in_infinitas
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -311,7 +309,10 @@ def generate_all_sorted_tables(songs: List[SongMetadata]) -> Dict[Tuple[str, str
 
 def main():
     html_file = Path("index.html")
-    songs = [value for key, value in get_em().items()]
+    songs = [
+        value
+        for key, value in get_current_version_song_metadata_not_in_infinitas().items()
+    ]
     log.info("Generating AC diff html")
     sorted_tables = generate_all_sorted_tables(songs)
     write_html(sorted_tables, html_file)
