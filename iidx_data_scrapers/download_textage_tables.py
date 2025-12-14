@@ -573,24 +573,30 @@ def get_current_version_song_metadata_not_in_infinitas() -> dict[str, SongMetada
     infinitas_only_songs, inf_version_data = filter_infinitas_only_songs(
         version_data, song_titles
     )
-    current_version_data_keys: dict = {
-        key: tuple(value) for key, value in current_version_data.items()
-    }
-    inf_version_data_keys: dict = {
-        key: tuple(value) for key, value in inf_version_data.items()
-    }
-    inf_keys = set(
-        tuple([key, inf_version_data_keys[key]]) for key in infinitas_only_songs.keys()
-    )
-    cur_ver_keys = set(
-        tuple([key, current_version_data_keys[key]])
-        for key in current_version_songs.keys()
-    )
-    not_in_inf_keys = cur_ver_keys.difference(inf_keys)
-    not_in_inf_songs = {
-        textage_id[0]: current_version_songs[textage_id[0]]
-        for textage_id in not_in_inf_keys
-    }
+    cur_diff = _read_difficulty(current_version_data)
+    inf_diff = _read_difficulty(inf_version_data)
+    diffs_to_check = [
+        Difficulty.SP_NORMAL,
+        Difficulty.SP_HYPER,
+        Difficulty.SP_ANOTHER,
+        Difficulty.SP_LEGGENDARIA,
+        Difficulty.DP_NORMAL,
+        Difficulty.DP_HYPER,
+        Difficulty.DP_ANOTHER,
+        Difficulty.DP_LEGGENDARIA,
+    ]
+
+    not_in_inf_songs = {}
+    for key, data in current_version_data.items():
+        if key in infinitas_only_songs:
+            cur_has_newer_charts = False
+            for d in diffs_to_check:
+                if cur_diff[key][d] != 0 and cur_diff[key][d] != inf_diff[key][d]:
+                    cur_has_newer_charts = True
+            if cur_has_newer_charts:
+                not_in_inf_songs[key] = current_version_songs[key]
+        else:
+            not_in_inf_songs[key] = current_version_songs[key]
     return _build_song_metadata_dict(
         current_version_data, song_titles, not_in_inf_songs
     )
