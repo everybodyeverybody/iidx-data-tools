@@ -1,23 +1,10 @@
 import logging
 from enum import Enum
-from concurrent.futures import Future
 from dataclasses import dataclass, field
-from typing import Optional
 
 # from numpy.typing import NDArray  # type: ignore
 
 log = logging.getLogger(__name__)
-
-"""
-This is a kitchen sink of utility classes for
-parsing and maintaining data across several of 
-the projects on this repo.
-
-This should eventually be refactored into a
-self-standing module that the other scripts can 
-import (to also ensure that we aren't vendoring old versions), 
-but that's future me's problem.
-"""
 
 
 class TitleType(Enum):
@@ -27,6 +14,10 @@ class TitleType(Enum):
 
 
 class Difficulty(Enum):
+    """
+    Corresponds to textage.cc's constants for difficulty
+    """
+
     SP_NORMAL = 2
     SP_HYPER = 3
     SP_ANOTHER = 4

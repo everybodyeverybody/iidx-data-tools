@@ -139,7 +139,7 @@ def filter_infinitas_only_songs(
             continue
         is_in_infinitas = version_data[tag][0] & 2
         if is_in_infinitas == 0:
-            log.warning(f"skipping {tag}:{title} in infinitas")
+            log.warning(f"chart not in infinitas, skipping: {tag}:{title}")
             continue
         infinitas_only_songs[tag] = title
         get_level_num = 2
@@ -313,6 +313,7 @@ def get_textage_version_data() -> dict[str, Any]:
         values = re.sub("F", "15", values)
         values = re.sub(r"//[a-zA-Z0-9]+", "", values)
         values = re.sub(',"<span.*span>"', "", values)
+        values = re.sub(r"\[,", "[0,", values)
         key = re.sub("'", '"', key)
         return f"{key}:{values}\n"
 
@@ -341,6 +342,7 @@ def get_textage_song_titles() -> dict[str, Any]:
         values = re.sub(r"\t", "", values)
         values = re.sub(r'"\s+', '"', values)
         values = re.sub(r'\s+"', '"', values)
+        values = re.sub(r"\/\*.*?\*\/", "", values)
         key = re.sub("'", '"', key)
         # convert shiftjis-to-ascii-to-utf8
         if re.match(r".*&[#A-Za-z0-9]+;.*", values):

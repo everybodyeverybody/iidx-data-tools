@@ -12,9 +12,14 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 
-def check_optional_difficulties(
+def generate_difficulty_html_values(
     song: SongMetadata,
 ) -> Dict[Difficulty, str]:
+    """
+    Given a song, if a difficulty type is represented
+    in its metadata, then append that difficulty type's
+    level to a lst of difficulties for that song.
+    """
     optional_difficulties: Dict[Difficulty, str] = {}
     for difficulty in Difficulty:
         if difficulty == Difficulty.UNKNOWN:
@@ -64,7 +69,7 @@ def build_table(table_id: Tuple[str, str], songs: List[SongMetadata]) -> str:
 
     tags_list = []
     for song in songs:
-        difficulties = check_optional_difficulties(song)
+        difficulties = generate_difficulty_html_values(song)
         song_row = (
             "<tr>"
             "<td class='song'>"
@@ -236,7 +241,7 @@ def write_html(sorted_tables: Dict[Tuple[str, str], str], output_html_file: Path
         "<body>\n"
         "<h3>Songs in IIDX {version_number} {version_name} Not in Infinitas</h3>"
         "{javascript}"
-        "<div class='update'>Generated from <a href='https://textage.cc/score/'>Textage</a> by <a href='https://github.com/everybodyeverybody/iidx-data-scrapers/tree/main/iidx_data_scrapers/ac_diff.py'>ac_diff.py</a></div>\n"
+        "<div class='update'>Generated from <a href='https://textage.cc/score/'>Textage</a> by <a href='https://github.com/everybodyeverybody/iidx-data-tools'>iidx-data-tools</a></div>\n"
         "<div class='update'>Last Update: <b>{now}</b></div>\n"
         "{buttons}"
         "{tables}"
@@ -259,6 +264,12 @@ def write_html(sorted_tables: Dict[Tuple[str, str], str], output_html_file: Path
 
 
 def generate_all_sorted_tables(songs: List[SongMetadata]) -> Dict[Tuple[str, str], str]:
+    """
+    We originally wanted to keep our site as javascriptless as possible on purpose.
+    We pre-generate tables sorted based on respective keys to be embedded
+    and replaced when filter buttons are pressed.
+    """
+    # TODO: actually do a real table sorter because this design is silly
     tables_and_sort_methods: Dict[Tuple[str, str], Callable] = {
         (
             "alphanumeric",
@@ -308,12 +319,9 @@ def generate_all_sorted_tables(songs: List[SongMetadata]) -> Dict[Tuple[str, str
 
 
 def main():
-    html_file = Path("index.html")
-    songs = [
-        value
-        for key, value in get_current_version_song_metadata_not_in_infinitas().items()
-    ]
     log.info("Generating AC diff html")
+    html_file = Path("index.html")
+    songs = get_current_version_song_metadata_not_in_infinitas().values()
     sorted_tables = generate_all_sorted_tables(songs)
     write_html(sorted_tables, html_file)
 
