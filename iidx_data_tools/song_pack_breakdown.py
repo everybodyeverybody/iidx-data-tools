@@ -61,6 +61,12 @@ def parse_json(song_pack_json_file: Path) -> dict[str, dict[str, Any]]:
 
 
 def normalize_konami_data_to_kamaitachi(song: tuple[str, str]) -> tuple[str, str]:
+    """
+    Song titles listed on Konami's site for infinitas do not match with the
+    song values provided by Tachi's iidx seeds files. Rather than do any
+    regex insanity, we keep map the artists/titles we know don't match
+    to the values in kamaitachi's json.
+    """
     normalizer: dict[tuple, tuple[str, str]] = {
         ("DE DE MOUSE", "Bitter & Lucky"): ("DÉ DÉ MOUSE", "Bitter & Lucky"),
         ('BEMANI Sound Team "TAG"', "Euphoric Lagoon"): (
@@ -182,6 +188,17 @@ def normalize_konami_data_to_kamaitachi(song: tuple[str, str]) -> tuple[str, str
             "L.E.D.-G",
             "THE ANCIENT KING IS BACK",
         ),
+        ("Juggernaut.", "GO!"): ("Juggernaut", "GO!"),
+        ("Yuta Imai", "SμG@R RU$#"): ("Yuta Imai", "SµG@R RU$#"),
+        ("くにたけみゆき", "Destiny Lovers"): ("くにたけみゆき", "Destiny lovers"),
+        ("cosMo@暴走P", "Hopeful Daybreak!!!"): ("cosMo＠暴走P", "Hopeful Daybreak!!!"),
+        (
+            "SOUND HOLIC Vs. BEMANI Sound Team “T.Kakuta” feat. Nana Takahashi",
+            "鬼華-修羅の舞-",
+        ): (
+            'SOUND HOLIC Vs. BEMANI Sound Team "T.Kakuta" feat. Nana Takahashi',
+            "鬼華-修羅の舞-",
+        ),
     }
 
     if song not in normalizer:
@@ -234,12 +251,14 @@ def parse_html(local_file: Path) -> dict:
     return songs_by_pack
 
 
-def download_kamaitachi_song_list() -> tuple[Path, Path]:
+def download_kamaitachi_song_list() -> tuple[Path, Path, Path]:
     songs_json_file = CONSTANTS.KAMAITACHI_SONG_LIST
-    chart_json_file = CONSTANTS.KAMAITACHI_CHART_LIST
+    chart_sp_json_file = CONSTANTS.KAMAITACHI_SP_CHART_LIST
+    chart_dp_json_file = CONSTANTS.KAMAITACHI_DP_CHART_LIST
     with (
         open(songs_json_file, "wt") as json_writer,
-        open(chart_json_file, "wt") as chart_writer,
+        open(chart_sp_json_file, "wt") as sp_chart_writer,
+        open(chart_dp_json_file, "wt") as dp_chart_writer,
     ):
         log.info(
             f"Downloading kamaitachi song list {CONSTANTS.KAMAITACHI_SONG_LIST_URL} "
@@ -255,25 +274,42 @@ def download_kamaitachi_song_list() -> tuple[Path, Path]:
                 f"code: {song_list_json_response.status_code} "
                 f"error: {song_list_json_response.text}"
             )
+
         log.info(
-            f"Downloading kamaitachi difficulty data {CONSTANTS.KAMAITACHI_CHART_LIST_URL} "
-            f"to {chart_json_file}"
+            f"Downloading kamaitachi SP difficulty data {CONSTANTS.KAMAITACHI_SP_CHART_LIST_URL} "
+            f"to {chart_sp_json_file}"
         )
-        chart_list_json_response = requests.get(CONSTANTS.KAMAITACHI_CHART_LIST_URL)
+        chart_list_json_response = requests.get(CONSTANTS.KAMAITACHI_SP_CHART_LIST_URL)
         if chart_list_json_response.status_code == 200:
-            chart_writer.write(chart_list_json_response.text)
+            sp_chart_writer.write(chart_list_json_response.text)
         else:
             raise RuntimeError(
                 f"could not download kamaitachi source from "
-                "{CONSTANTS.KAMAITACHI_CHART_LIST_URL} "
+                "{CONSTANTS.KAMAITACHI_SP_CHART_LIST_URL} "
                 f"code: {chart_list_json_response.status_code} "
                 f"error: {chart_list_json_response.text}"
             )
-    return songs_json_file, chart_json_file
+
+        log.info(
+            f"Downloading kamaitachi DP difficulty data {CONSTANTS.KAMAITACHI_DP_CHART_LIST_URL} "
+            f"to {chart_dp_json_file}"
+        )
+        chart_list_json_response = requests.get(CONSTANTS.KAMAITACHI_DP_CHART_LIST_URL)
+        if chart_list_json_response.status_code == 200:
+            dp_chart_writer.write(chart_list_json_response.text)
+        else:
+            raise RuntimeError(
+                f"could not download kamaitachi source from "
+                "{CONSTANTS.KAMAITACHI_DP_CHART_LIST_URL} "
+                f"code: {chart_list_json_response.status_code} "
+                f"error: {chart_list_json_response.text}"
+            )
+
+    return songs_json_file, chart_sp_json_file, chart_dp_json_file
 
 
 def combine_kamaitachi_data(
-    songs: Path, charts: Path
+    songs: Path, sp_charts: Path, dp_charts: Path
 ) -> dict[tuple, dict[tuple, dict[str, Any]]]:
     with open(songs, "rt") as reader:
         songs_json = json.load(reader)
@@ -286,38 +322,47 @@ def combine_kamaitachi_data(
         for entry in songs_json
     }
 
-    with open(charts, "rt") as reader:
-        charts_json = json.load(reader)
+    with open(sp_charts, "rt") as reader:
+        sp_charts_json = json.load(reader)
+
+    with open(dp_charts, "rt") as reader:
+        dp_charts_json = json.load(reader)
 
     charts_by_kamaitachi_id: dict[int, dict[tuple, dict[str, Any]]] = {}
-    for c in charts_json:
-        if "inf" not in c["versions"]:
-            continue
-        if c["songID"] not in charts_by_kamaitachi_id:
-            charts_by_kamaitachi_id[c["songID"]] = {}
-        if c["levelNum"] == 0:
-            continue
-        level = c["levelNum"]
-        nc_tier_label = None
-        hc_tier_label = None
 
-        if level >= 11 and "ncTier" in c["data"]:
-            if c["data"]["ncTier"]["individualDifference"]:
-                tier_type = "個"
+    for chart_json, is_sp in [(sp_charts_json, True), (dp_charts_json, False)]:
+        for c in chart_json:
+            if "inf" not in c["versions"]:
+                continue
+            if c["songID"] not in charts_by_kamaitachi_id:
+                charts_by_kamaitachi_id[c["songID"]] = {}
+            if c["levelNum"] == 0:
+                continue
+            level = c["levelNum"]
+            nc_tier_label = None
+            hc_tier_label = None
+
+            if level >= 11 and "ncTier" in c["data"]:
+                if c["data"]["ncTier"]["individualDifference"]:
+                    tier_type = "個"
+                else:
+                    tier_type = "地"
+                nc_tier_label = f"{tier_type}{c['data']['ncTier']['text']}"
+
+            if level >= 11 and "hcTier" in c["data"]:
+                if c["data"]["hcTier"]["individualDifference"]:
+                    tier_type = "個"
+                else:
+                    tier_type = "地"
+                hc_tier_label = f"{tier_type}{c['data']['hcTier']['text']}"
+
+            if is_sp:
+                playtype = "SP"
             else:
-                tier_type = "地"
-            nc_tier_label = f"{tier_type}{c['data']['ncTier']['text']}"
-
-        if level >= 11 and "hcTier" in c["data"]:
-            if c["data"]["hcTier"]["individualDifference"]:
-                tier_type = "個"
-            else:
-                tier_type = "地"
-            hc_tier_label = f"{tier_type}{c['data']['hcTier']['text']}"
-
-        entry = (c["playtype"], c["difficulty"])
-        value = {"level": level, "nc_tier": nc_tier_label, "hc_tier": hc_tier_label}
-        charts_by_kamaitachi_id[c["songID"]][entry] = value
+                playtype = "DP"
+            entry = (playtype, c["difficulty"])
+            value = {"level": level, "nc_tier": nc_tier_label, "hc_tier": hc_tier_label}
+            charts_by_kamaitachi_id[c["songID"]][entry] = value
 
     combined_data: dict = {}
     for song_id in songs_by_kamaitachi_id.keys():
@@ -793,14 +838,15 @@ def main():
         infinitas_music_html = CONSTANTS.INFINITAS_MUSIC_HTML
         infinitas_song_pack_json = CONSTANTS.INFINITAS_SONG_PACK_JSON
         ksongs = CONSTANTS.KAMAITACHI_SONG_LIST
-        kcharts = CONSTANTS.KAMAITACHI_CHART_LIST
+        k_sp_charts = CONSTANTS.KAMAITACHI_SP_CHART_LIST
+        k_dp_charts = CONSTANTS.KAMAITACHI_DP_CHART_LIST
     else:
         infinitas_music_html = download_konami_song_data()
         infinitas_song_pack_json = download_song_pack_price_data()
-        ksongs, kcharts = download_kamaitachi_song_list()
+        ksongs, k_sp_charts, k_dp_charts = download_kamaitachi_song_list()
     songs_by_pack = parse_html(infinitas_music_html)
     pack_info = parse_json(infinitas_song_pack_json)
-    combined_kamaitachi_data = combine_kamaitachi_data(ksongs, kcharts)
+    combined_kamaitachi_data = combine_kamaitachi_data(ksongs, k_sp_charts, k_dp_charts)
     song_difficulties_by_pack = {}
     for pack in songs_by_pack:
         pack_info[pack]["sublabel"] = songs_by_pack[pack]["PRODUCT_NAME_SUBLABEL"]
