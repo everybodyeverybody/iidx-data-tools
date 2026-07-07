@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
 import os
+import zoneinfo
 from pathlib import Path
-# from .local_dataclasses import NumberArea
 
 BASE_DIR = Path(os.getenv("PWD", default="./"))
 DATA_DIR = BASE_DIR / Path("data")
@@ -17,3 +16,4 @@ INFINITAS_MUSIC_URL = "https://p.eagate.573.jp/game/infinitas/2/music/index.html
 KAMAITACHI_SONG_LIST = DATA_DIR / Path("kamaitachi-iidx-songs.json")
 KAMAITACHI_SP_CHART_LIST = DATA_DIR / Path("kamaitachi-iidx-sp-charts.json")
 KAMAITACHI_DP_CHART_LIST = DATA_DIR / Path("kamaitachi-iidx-dp-charts.json")
+TIMEZONE = zoneinfo.ZoneInfo("America/New_York")
