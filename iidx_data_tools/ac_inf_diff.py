@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 import time
 import logging
+import argparse
 from pathlib import Path
+from typing import Callable
 from datetime import datetime
-from typing import List, Dict, Callable, Tuple
 from .local_dataclasses import SongMetadata, Difficulty
 
 from .download_textage_tables import get_current_version_song_metadata_not_in_infinitas
@@ -14,13 +15,13 @@ log = logging.getLogger(__name__)
 
 def generate_difficulty_html_values(
     song: SongMetadata,
-) -> Dict[Difficulty, str]:
+) -> dict[Difficulty, str]:
     """
     Given a song, if a difficulty type is represented
     in its metadata, then append that difficulty type's
     level to a lst of difficulties for that song.
     """
-    optional_difficulties: Dict[Difficulty, str] = {}
+    optional_difficulties: dict[Difficulty, str] = {}
     for difficulty in Difficulty:
         if difficulty == Difficulty.UNKNOWN:
             continue
@@ -35,7 +36,7 @@ def generate_difficulty_html_values(
     return optional_difficulties
 
 
-def build_table(table_id: Tuple[str, str], songs: List[SongMetadata]) -> str:
+def build_table(table_id: tuple[str, str], songs: list[SongMetadata]) -> str:
     display = "none"
     # TODO: pass this in as a flag or something
     if table_id[0] == "alphanumeric":
@@ -95,7 +96,7 @@ def build_table(table_id: Tuple[str, str], songs: List[SongMetadata]) -> str:
     return f"{table_block_start}\n{header}\n{row_tags}\n{table_block_end}\n"
 
 
-def build_javascript(table_list: List[Tuple[str, str]]) -> str:
+def build_javascript(table_list: list[tuple[str, str]]) -> str:
     javascript_template = """
     <script>
         const registeredTables = new Map();
@@ -143,7 +144,7 @@ def build_javascript(table_list: List[Tuple[str, str]]) -> str:
     return all_js
 
 
-def build_buttons(sorted_tables: List[Tuple[str, str]]) -> str:
+def build_buttons(sorted_tables: list[tuple[str, str]]) -> str:
     buttons = []
     buttons_table = "<table id='sort_buttons'>{buttons}</table>"
     input_template = (
@@ -166,9 +167,9 @@ def build_buttons(sorted_tables: List[Tuple[str, str]]) -> str:
     return buttons_table.format(buttons=button_html)
 
 
-def write_html(sorted_tables: Dict[Tuple[str, str], str], output_html_file: Path):
+def write_html(sorted_tables: dict[tuple[str, str], str], output_html_file: Path):
     now = f"{datetime.now()} {time.tzname[1]}"
-    table_ids: List[Tuple[str, str]] = [table for table in sorted_tables.keys()]
+    table_ids: list[tuple[str, str]] = [table for table in sorted_tables.keys()]
     javascript = build_javascript(table_ids)
     buttons = build_buttons(table_ids)
     version_name = "Sparkle Shower"
@@ -263,14 +264,16 @@ def write_html(sorted_tables: Dict[Tuple[str, str], str], output_html_file: Path
         html_writer.write(html)
 
 
-def generate_all_sorted_tables(songs: List[SongMetadata]) -> Dict[Tuple[str, str], str]:
+def generate_all_sorted_tables(
+    songs: list[SongMetadata],
+) -> dict[tuple[str, str], str]:
     """
     We originally wanted to keep our site as javascriptless as possible on purpose.
     We pre-generate tables sorted based on respective keys to be embedded
     and replaced when filter buttons are pressed.
     """
     # TODO: actually do a real table sorter because this design is silly
-    tables_and_sort_methods: Dict[Tuple[str, str], Callable] = {
+    tables_and_sort_methods: dict[tuple[str, str], Callable] = {
         (
             "alphanumeric",
             "By Title",
@@ -312,19 +315,38 @@ def generate_all_sorted_tables(songs: List[SongMetadata]) -> Dict[Tuple[str, str
             "By DP Leggendaria",
         ): SongMetadata.sort_by_dpl,
     }
-    sorted_tables: Dict[Tuple[str, str], str] = {}
+    sorted_tables: dict[tuple[str, str], str] = {}
     for table_id, sort_method in tables_and_sort_methods.items():
         sorted_tables[table_id] = build_table(table_id, sorted(songs, key=sort_method))
     return sorted_tables
 
 
-def main():
+def generate(skip_download: bool, html_output_path: Path):
     log.info("Generating AC diff html")
-    html_file = Path("index.html")
-    songs = get_current_version_song_metadata_not_in_infinitas().values()
-    sorted_tables = generate_all_sorted_tables(songs)
-    write_html(sorted_tables, html_file)
+    song_dict = get_current_version_song_metadata_not_in_infinitas()
+    song_metadata_list = list(song_dict.values())
+    sorted_tables = generate_all_sorted_tables(song_metadata_list)
+    write_html(sorted_tables, html_output_path)
+
+
+def parse_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--skip-download",
+        action="store_true",
+        dest="skip_download",
+        help="If set, will skip redownloading data from kamaitachi and e-amuse. Defaults to False.",
+    )
+
+    parser.add_argument(
+        "--html-output-path",
+        dest="html_output_path",
+        type=str,
+        default="ac_inf_diff_index.html",
+    )
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_arguments()
+    generate(args.skip_download, args.html_output_path)

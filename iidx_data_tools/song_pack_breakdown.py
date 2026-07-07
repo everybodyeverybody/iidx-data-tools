@@ -657,118 +657,128 @@ def generate_song_table(
 
 
 def get_css() -> str:
-    return """
+    css = """
+        body {
+            font-family: sans-serif;
+            color: #000000;
+        }
 
-body {
-    font-family: sans-serif;
-    color: #000000;
-}
+        .pack {
+            padding-top:1em;
+            padding-bottom:1em;
+            display: grid;
+            grid-template-columns: repeat(3,2fr,1fr,1fr);
+            gap: 0.25em;
+        }
 
-.pack {
-    padding-top:1em;
-    padding-bottom:1em;
-    display: grid;
-    grid-template-columns: repeat(3,2fr,1fr,1fr);
-    gap: 0.25em;
-}
+        .song_table {
+          grid-row:3;
+          border: 1px solid #000000;
+        }
 
-.song_table {
-  grid-row:3;
-  border: 1px solid #000000;
-}
+        .by_play_style {
+            grid-row: 3;
+            border: 1px solid #000000;
+        }
 
-.by_play_style {
-    grid-row: 3;
-    border: 1px solid #000000;
-}
+        .by_community_rank {
+            grid-row: 3;
+            border: 1px solid #000000;
+        }
 
-.by_community_rank {
-    grid-row: 3;
-    border: 1px solid #000000;
-}
+        .pack_header {
+            padding:1em;
+            font-size:1.5em;
+            font-weight: bold;
+            color:#ffffff;
+            background-color:#0000ff;
+            grid-row:1;
+            grid-column: 1 / span 3;
+        }
 
-.pack_header {
-    padding:1em;
-    font-size:1.5em;
-    font-weight: bold;
-    color:#ffffff;
-    background-color:#0000ff;
-    grid-row:1;
-    grid-column: 1 / span 3;
-}
+        .pack_price {
+            padding:0.5em;
+            font-weight: bold;
+            grid-row:2;
+            grid-column: 1 / span 3;
+        }
 
-.pack_price {
-    padding:0.5em;
-    font-weight: bold;
-    grid-row:2;
-    grid-column: 1 / span 3;
-}
+        .rank {
+           font-weight: bold;
+            font-size:0.75em;
+        }
 
-.rank {
-   font-weight: bold;
-    font-size:0.75em;
-}
+        .title {
+            text-align: left;
+        }
 
-.title {
-    text-align: left;
-}
+        th.title {
+            width: 24em;
+            font-weight: bold;
+            color: #ffffff;
+            background-color:#000000;
+        }
 
-th.title {
-    width: 24em;
-    font-weight: bold;
-    color: #ffffff;
-    background-color:#000000;
-}
+        th.shorttitle {
+            text-align: left;
+            font-weight: bold;
+            color: #ffffff;
+            background-color:#000000;
+        }
 
-th.shorttitle {
-    text-align: left;
-    font-weight: bold;
-    color: #ffffff;
-    background-color:#000000;
-}
+        .num {
+            font-weight: bold;
+            text-align:left;
+            font-family: monospace;
+            width: 2em;
+        }
 
-.num {
-    font-weight: bold;
-    text-align:left;
-    font-family: monospace;
-    width: 2em;
-}
-
-h3  {
-    font-weight: bold;
-    color:#ffffff;
-    background-color:#000000;
-    padding: 1em;
-    margin: 0em;
-}
-/* colors for difficulties */
-.b {
-    background-color:#ADF798;
-}
-.n {
-    background-color:#66ffff;
-}
-.h {
-    background-color:#ffff45;
-}
-.a {
-    background-color:#F89B86;
-}
-.l {
-    background-color:#EC98F7;
-}
-.total {
-    background-color:#000000;
-    color:#ffffff;
-}
-.sale {
-    color:#ff0000;
-    font-weight:bold;
-}
+        h3  {
+            font-weight: bold;
+            color:#ffffff;
+            background-color:#000000;
+            padding: 1em;
+            margin: 0em;
+        }
+        /* colors for difficulties */
+        .b {
+            background-color:#ADF798;
+        }
+        .n {
+            background-color:#66ffff;
+        }
+        .h {
+            background-color:#ffff45;
+        }
+        .a {
+            background-color:#F89B86;
+        }
+        .l {
+            background-color:#EC98F7;
+        }
+        .total {
+            background-color:#000000;
+            color:#ffffff;
+        }
+        .sale {
+            color:#ff0000;
+            font-weight:bold;
+        }
     """
+    return css
 
 
-def generate_and_write_html(song_difficulties_by_pack, pack_info) -> None:
+def write_html(html: str, html_output_path: Path):
+    with open(html_output_path, "wt") as writer:
+        writer.write(html)
+    log.info(f"wrote updated pack breakdown to {html_output_path}")
+    pass
+
+
+def generate_html(
+    song_difficulties_by_pack: dict[str, dict],
+    pack_info: dict[str, dict[str, Any]],
+) -> str:
     last_update = datetime.datetime.now()
     css = get_css()
     header = (
@@ -814,11 +824,7 @@ def generate_and_write_html(song_difficulties_by_pack, pack_info) -> None:
     toc = "<ul>" + "\n".join(toc_links) + "</ul>"
     body = "\n".join(analysis_list)
     output_html = "\n".join([header, toc, body, footer])
-    output_file = "index.html"
-    with open("index.html", "wt") as writer:
-        writer.write(output_html)
-    log.info(f"wrote updated list to {output_file}")
-    return
+    return output_html
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -829,10 +835,17 @@ def parse_arguments() -> argparse.Namespace:
         dest="skip_download",
         help="If set, will skip redownloading data from kamaitachi and e-amuse. Defaults to False.",
     )
+
+    parser.add_argument(
+        "--html-output-path",
+        dest="html_output_path",
+        type=str,
+        default="song_pack_breakdown_index.html",
+    )
     return parser.parse_args()
 
 
-def main():
+def generate(skip_download: bool, html_output_path: Path):
     args = parse_arguments()
     if args.skip_download:
         infinitas_music_html = CONSTANTS.INFINITAS_MUSIC_HTML
@@ -845,9 +858,9 @@ def main():
         infinitas_song_pack_json = download_song_pack_price_data()
         ksongs, k_sp_charts, k_dp_charts = download_kamaitachi_song_list()
     songs_by_pack = parse_html(infinitas_music_html)
-    pack_info = parse_json(infinitas_song_pack_json)
+    pack_info: dict[str, dict[str, Any]] = parse_json(infinitas_song_pack_json)
     combined_kamaitachi_data = combine_kamaitachi_data(ksongs, k_sp_charts, k_dp_charts)
-    song_difficulties_by_pack = {}
+    song_difficulties_by_pack: dict[str, dict] = {}
     for pack in songs_by_pack:
         pack_info[pack]["sublabel"] = songs_by_pack[pack]["PRODUCT_NAME_SUBLABEL"]
         if pack not in song_difficulties_by_pack:
@@ -856,9 +869,11 @@ def main():
             if song not in combined_kamaitachi_data:
                 raise RuntimeError(f"Could not find {song} in kamaitachi data.")
             song_difficulties_by_pack[pack][song] = combined_kamaitachi_data[song]
-    generate_and_write_html(song_difficulties_by_pack, pack_info)
+    html = generate_html(song_difficulties_by_pack, pack_info)
+    write_html(html, html_output_path)
     return
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_arguments()
+    generate(args.skip_download, Path(args.html_output_path))

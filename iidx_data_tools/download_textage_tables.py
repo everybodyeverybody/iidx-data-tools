@@ -7,7 +7,7 @@ import html
 import logging
 from pathlib import Path
 from datetime import datetime
-from typing import Callable, Any, Union
+from typing import Callable, Any
 
 import requests  # type: ignore
 
@@ -357,7 +357,7 @@ def get_textage_song_titles() -> dict[str, Any]:
     )
 
 
-def _get_textage_note_counts_and_bpm() -> dict[str, list[Union[int, str]]]:
+def _get_textage_note_counts_and_bpm() -> dict[str, list[int | str]]:
     def __read_notes_and_bpm(notes_and_bpm_line: str) -> str:
         line = re.sub("'", '"', notes_and_bpm_line)
         return f"{line}\n"
